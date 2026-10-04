@@ -61,6 +61,10 @@ See the [dense-data vignette](vignettes/dense-data.Rmd) for the simulation,
 complete code, canonical weights, and Fisher objective calculations. When
 installed with vignettes, open it using `vignette("dense-data", package = "dCCA")`.
 
+To include vignettes in a GitHub installation, install `knitr` and `rmarkdown`,
+then use `remotes::install_github("Rainali475/dCCA", build_vignettes = TRUE)`.
+Pandoc is also required to build them.
+
 ## Input formats and preprocessing
 
 **Paired lists:** each list element represents a sample group. Each X/Y pair
