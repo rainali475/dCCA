@@ -3,3 +3,4 @@
 *.tar.gz
 AGENTS.md
 DEVELOPMENT.md
+.vignette-preview/

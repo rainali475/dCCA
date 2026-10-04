@@ -11,3 +11,4 @@
 ^\.renvignore$
 ^DEVELOPMENT\.md$
 ^LICENSE\.md$
+^\.vignette-preview$

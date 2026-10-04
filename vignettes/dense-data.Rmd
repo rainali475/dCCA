@@ -1,0 +1,246 @@
+---
+title: "Differential CCA with dense paired data"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Differential CCA with dense paired data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", dpi = 150,
+                     fig.width = 10.67, fig.height = 5.67, fig.align = "center",
+                     out.width = "100%")
+library(dCCA)
+```
+
+## Generate paired dense observations
+
+This reproducible example has two groups, each with 250 paired observations,
+four X features, and four Y features. Every feature has a nonzero signal loading
+and continuous noise. The latent variables for each paired observation are
+
+\[
+u \sim N(0,1), \qquad
+v = r u + \sqrt{1-r^2}w, \qquad w \sim N(0,1).
+\]
+
+Their correlation r is 0.15 in the weak-coupling group and 0.85 in the
+strong-coupling group. Observed feature vectors are generated as
+
+\[
+X_i = u_i a_0 + 0.55\varepsilon_{X,i}, \qquad
+Y_i = v_i b_0 + 0.55\varepsilon_{Y,i},
+\]
+
+where the noise entries are independent standard normals, independent of the
+latent variables. The shared unit-length loading vectors are normalized versions
+of `(0.62, 0.49, -0.44, 0.42)` and `(0.55, -0.51, 0.48, 0.45)`.
+Thus both groups have the same population marginal covariances, but different
+cross-covariances: `Cov(X, Y) = r * a0 %*% t(b0)`. The latent generating
+correlation is not the observed score correlation: feature noise attenuates it.
+The generating loadings are never passed to dCCA.
+
+## Fit common canonical weights
+
+List elements are paired by position. `z = c(-1, 1)` contrasts the weak and
+strong groups; dCCA standardizes these weights to approximately
+`c(-0.707, 0.707)`. We leave `c1` and `c2` unset, giving dense weights without
+L1 constraints. Eight paired starts reduce dependence on one initialization.
+The default objective uses Fisher-transformed correlations; a second fit
+explicitly uses raw correlations for comparison. Both fits estimate group
+marginal covariances without assuming they are equal.
+
+```{r generate-and-fit}
+set.seed(475)
+n <- 250
+ax <- c(.62, .49, -.44, .42); ax <- ax / sqrt(sum(ax^2))
+by <- c(.55, -.51, .48, .45); by <- by / sqrt(sum(by^2))
+generate_group <- function(r) {
+  latent_x <- rnorm(n)
+  latent_y <- r * latent_x + sqrt(1 - r^2) * rnorm(n)
+  list(X = outer(latent_x, ax) + .55 * matrix(rnorm(n * 4), n, 4),
+       Y = outer(latent_y, by) + .55 * matrix(rnorm(n * 4), n, 4))
+}
+groups <- lapply(c(.15, .85), generate_group)
+X <- lapply(groups, `[[`, "X"); Y <- lapply(groups, `[[`, "Y")
+names(X) <- names(Y) <- c("Weak coupling", "Strong coupling")
+a_starts <- c(list(rep(1, 4)), replicate(7, rnorm(4), simplify = FALSE))
+b_starts <- c(list(rep(1, 4)), replicate(7, rnorm(4), simplify = FALSE))
+fit <- dCCA(X = X, Y = Y, z = c(-1, 1),
+  a_inits = a_starts, b_inits = b_starts, max_iter = 200)
+raw <- dCCA(X = X, Y = Y, z = c(-1, 1),
+  a_inits = a_starts, b_inits = b_starts, max_iter = 200,
+  fisher.transform = FALSE)
+```
+
+## Inspect feature correlations and weights
+
+The heatmaps summarize pairwise X-Y correlations before projection. The bar
+plots show the fitted weights, which are used for both groups. Simultaneously
+reversing both weight vectors leaves correlations unchanged.
+
+```{r plot-helpers}
+navy <- "#17324D"; teal <- "#168B83"; amber <- "#DD8A30"; muted <- "#657589"
+ink <- "#25364A"; grid <- "#E6EBF0"
+
+# Use consistent fonts and colors throughout the figures.
+par_style <- function() {
+  par(family = "sans", col = ink, col.axis = muted, col.lab = ink,
+      col.main = navy, bg = "#FFFFFF", las = 1, bty = "n", tcl = -.2)
+}
+heatmap_panel <- function(i) {
+  C <- cor(X[[i]], Y[[i]])
+  colors <- colorRampPalette(c("#236893", "#F6F8FA", "#D67931"))(101)
+  plot.new(); plot.window(xlim = c(.5, 4.5), ylim = c(.5, 4.5), asp = 1)
+  for (j in 1:4) for (k in 1:4) {
+    value <- C[j, k]
+    rect(k - .48, 5 - j - .48, k + .48, 5 - j + .48,
+         col = colors[round((value + 1) * 50) + 1], border = NA)
+    text(k, 5 - j, sprintf("%.2f", value), cex = .95,
+         col = if (abs(value) > .55) "white" else ink)
+  }
+  axis(1, at = 1:4, labels = paste0("Y", 1:4), tick = FALSE)
+  axis(2, at = 1:4, labels = paste0("X", 4:1), tick = FALSE)
+  title(main = names(X)[i], sub = "Pairwise X-Y feature correlations", cex.main = 1.1,
+        col.sub = muted, cex.sub = .85)
+}
+```
+
+```{r dense-input-and-weights, fig.height=8, echo=FALSE}
+par_style()
+par(mfrow = c(2, 2), mar = c(3.7, 4, 2.5, 1), oma = c(1.2, 0, 4.5, 0))
+heatmap_panel(1); heatmap_panel(2)
+for (view in c("X", "Y")) {
+  w <- if (view == "X") fit$result$a else fit$result$b
+  barplot(w, names.arg = paste0(view, 1:4), col = ifelse(w >= 0, teal, amber),
+          border = NA, ylim = c(-1, 1), ylab = "Canonical weight",
+          main = paste(view, "weights shared by both groups"))
+  abline(h = 0, col = muted)
+  mtext(if (view == "X") "u = X a" else "v = Y b", side = 1, line = 2.5, col = muted)
+}
+mtext("From dense input to a shared canonical direction", outer = TRUE,
+      side = 3, line = 2.6, font = 2, cex = 1.45, col = navy)
+mtext("Simulated data | 250 paired observations per group | 4 X + 4 Y features | no sparsity constraints",
+      outer = TRUE, side = 3, line = .9, col = muted, cex = .95)
+mtext("Weights are fitted using the default Fisher objective; simultaneous signs are arbitrary.",
+      outer = TRUE, side = 1, line = .1, cex = .85, col = muted)
+```
+
+## Calculate and plot canonical scores
+
+Within each group, center the observations and calculate `u = X a` and
+`v = Y b`. These are the projected scores, not the latent variables used during
+simulation. Score correlations computed directly agree with `fit$result$rho`.
+The figure standardizes scores separately within each group for display;
+this leaves their correlations unchanged.
+
+```{r scores}
+scores <- lapply(seq_along(X), function(i) {
+  cbind(u = as.vector(scale(X[[i]], scale = FALSE) %*% fit$result$a),
+        v = as.vector(scale(Y[[i]], scale = FALSE) %*% fit$result$b))
+})
+score_rho <- vapply(scores, function(s) cor(s[, 1], s[, 2]), numeric(1))
+stopifnot(isTRUE(all.equal(score_rho, unname(fit$result$rho), tolerance = 1e-9)))
+stopifnot(abs(sum(fit$parameters$z * atanh(score_rho)) - fit$result$obj_val) < 1e-9)
+data.frame(group = names(X), correlation = score_rho)
+```
+
+```{r canonical-scores, fig.height=5.33, echo=FALSE}
+par_style()
+par(mfrow = c(1, 2), mar = c(4.7, 4.7, 3.2, 1), oma = c(2, 0, 4.2, 0))
+for (i in 1:2) {
+  s <- scale(scores[[i]])
+  color <- c(amber, teal)[i]
+  plot(s[, 1], s[, 2], pch = 16, cex = .8, col = adjustcolor(color, .45),
+       xlim = c(-3.8, 3.8), ylim = c(-3.8, 3.8),
+       xlab = "Standardized X score  (u = X a)",
+       ylab = "Standardized Y score  (v = Y b)",
+       main = sprintf("%s: rho = %.3f", names(X)[i], score_rho[i]))
+  abline(h = 0, v = 0, col = grid)
+  abline(a = 0, b = score_rho[i], col = color, lwd = 3)
+}
+mtext("The same weights expose different group correlations", outer = TRUE,
+      side = 3, line = 2.4, cex = 1.45, font = 2, col = navy)
+mtext("Each dot is one paired observation; lines show fitted score relationships.",
+      outer = TRUE, side = 3, line = .8, cex = .95, col = muted)
+mtext(sprintf("Observed correlation difference: rho(strong) - rho(weak) = %.3f", diff(score_rho)),
+      outer = TRUE, side = 1, line = .6, cex = 1, col = navy)
+```
+
+The fitted score correlations are approximately 0.092 and 0.640, a difference
+of 0.548. Finite sampling, feature noise, and optimization of a differential
+objective account for differences from the latent correlations of 0.15 and 0.85.
+Exact results can differ slightly across numerical-library versions.
+
+## Verify the Fisher objective and convergence
+
+For the selected component, dCCA maximizes
+
+\[
+J = \sum_g z_g\operatorname{atanh}(\rho_g).
+\]
+
+The objective is approximately `-0.707 * 0.092 + 0.707 * 0.757 = 0.471`.
+The group contributions use transformed correlations; returned `rho` values
+remain on the raw scale. Correlations are clipped just inside (-1, 1) before
+transformation; this example is far from those boundaries.
+
+```{r objective-calculation}
+data.frame(
+  group = names(X), z = fit$parameters$z,
+  rho = score_rho, fisher_rho = atanh(score_rho),
+  contribution = fit$parameters$z * atanh(score_rho)
+)
+fit$result$obj_val
+fit$result$n_iter
+fit$result$convergence
+```
+
+```{r objective-and-convergence, echo=FALSE}
+par_style()
+par(mfrow = c(1, 2), mar = c(4.7, 4.7, 3.3, 1), oma = c(2.4, 0, 4.2, 0))
+trace <- fit$result$obj_val_record
+plot(seq_along(trace) - 1, trace, type = "o", pch = 16, cex = .6,
+     col = teal, lwd = 2.5, xlab = "Outer iteration (0 = initialization)",
+     ylab = "Weighted Fisher objective", main = "Optimization of the selected start")
+abline(h = fit$result$obj_val, col = muted, lty = 3)
+legend("bottomright", legend = sprintf("%d iterations; convergence = %s",
+       fit$result$n_iter, fit$result$convergence), bty = "n", cex = .85, text.col = muted)
+z <- fit$parameters$z
+fisher_rho <- atanh(score_rho)
+contribution <- z * fisher_rho
+barplot(contribution, names.arg = c("Weak group", "Strong group"),
+        col = c(amber, teal), border = NA,
+        ylim = range(c(0, contribution)) + c(-.12, .18),
+        ylab = "Contribution to J = sum(z * atanh(rho))", main = "How the objective is calculated")
+abline(h = 0, col = muted)
+for (i in 1:2) {
+  text(c(.7, 1.9)[i], contribution[i] + ifelse(contribution[i] >= 0, .075, -.075),
+       sprintf("%.3f x %.3f = %.3f", z[i], fisher_rho[i], contribution[i]), cex = .9)
+}
+mtext("Fitting and calculating the differential objective", outer = TRUE,
+      side = 3, line = 2.4, font = 2, cex = 1.45, col = navy)
+mtext("Input z = (-1, +1) is standardized to (-0.707, +0.707); dense weights are estimated with CG.",
+      outer = TRUE, side = 3, line = .8, cex = .95, col = muted)
+mtext(sprintf("J = %.3f  |  Raw-objective fit on the same data: rho = (%.3f, %.3f)",
+      fit$result$obj_val, raw$result$rho[1], raw$result$rho[2]), outer = TRUE,
+      side = 1, line = .9, col = navy, cex = .95)
+```
+
+The displayed trace belongs to the selected start, not all eight fits. It
+converges in about five outer iterations here. This is a numerical convergence
+criterion, not proof of a global optimum. dCCA returns the best observed weights
+and retains the full iteration history.
+
+## Compare with raw-correlation fitting
+
+```{r raw-comparison}
+rbind(Fisher = fit$result$rho, Raw = raw$result$rho)
+```
+
+The raw-objective fit gives correlations of approximately 0.062 and 0.616.
+The two objectives favor different weight directions; their numerical objective
+values are on different scales and should not be ranked against one another.
+Neither fit supplies a significance test or out-of-sample validation. For real
+data, evaluate stability and generalization using independent observations.

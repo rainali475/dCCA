@@ -14,7 +14,8 @@ License: MIT + file LICENSE
 URL: https://github.com/Rainali475/dCCA
 BugReports: https://github.com/Rainali475/dCCA/issues
 Imports: dplyr, expm, purrr, stats
-Suggests: testthat (>= 3.0.0), roxygen2, renv, pkgload
+Suggests: testthat (>= 3.0.0), roxygen2, renv, pkgload, knitr, rmarkdown
+VignetteBuilder: knitr
 Config/testthat/edition: 3
 Config/roxygen2/version: 8.1.0
 Encoding: UTF-8

@@ -49,6 +49,18 @@ fit$result$obj_val
 ```
 
 
+## Dense-data demo
+
+This simulated example uses 250 paired observations per group and four
+features per view, with no sparsity constraints. Shared fitted weights reveal
+weak and strong group correlations of approximately **0.092** and **0.640**.
+
+![Canonical scores for the dense-data example](man/figures/dense-canonical-scores.png)
+
+See the [dense-data vignette](vignettes/dense-data.Rmd) for the simulation,
+complete code, canonical weights, and Fisher objective calculations. When
+installed with vignettes, open it using `vignette("dense-data", package = "dCCA")`.
+
 ## Input formats and preprocessing
 
 **Paired lists:** each list element represents a sample group. Each X/Y pair
