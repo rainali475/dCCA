@@ -1,0 +1,13 @@
+^dCCA\.Rproj$
+^\.Rproj\.user$
+^dCCA\.R$
+^reorganize\.py$
+^AGENTS\.md$
+^.*\.Rcheck$
+^.*\.tar\.gz$
+^renv$
+^renv\.lock$
+^\.Rprofile$
+^\.renvignore$
+^DEVELOPMENT\.md$
+^LICENSE\.md$

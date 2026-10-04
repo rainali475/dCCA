@@ -1,0 +1,5 @@
+.Rproj.user
+*.Rcheck/
+*.tar.gz
+AGENTS.md
+DEVELOPMENT.md

@@ -1,0 +1,21 @@
+Package: dCCA
+Title: Differential Canonical Correlation Analysis
+Version: 0.1.0
+Authors@R: 
+    person(
+      "Yuzi", "Li", 
+      email = "yli493@jh.edu", 
+      role = c("aut", "cre")
+    )
+Description: Estimates shared canonical weights maximizing weighted
+    Fisher-transformed or raw correlations across paired sample groups,
+    with sparse constraints and covariance deflation.
+License: MIT + file LICENSE
+URL: https://github.com/Rainali475/dCCA
+BugReports: https://github.com/Rainali475/dCCA/issues
+Imports: dplyr, expm, purrr, stats
+Suggests: testthat (>= 3.0.0), roxygen2, renv, pkgload
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.1.0
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
