@@ -1,6 +1,8 @@
 # Validate inputs once and center observations within their sample groups.
 prepare_input <- function(X, Y, samps, z, var.x, var.y, var.xy,
                           equal_var.x, equal_var.y) {
+  global.x <- global.y <- NULL
+  group_names <- if (is.list(X) && !is.data.frame(X)) names(X) else NULL
   for (flag in list(equal_var.x, equal_var.y)) {
     if (!is.logical(flag) || length(flag) != 1 || is.na(flag)) stop("equal_var flags must be logical scalars")
   }
@@ -48,6 +50,11 @@ prepare_input <- function(X, Y, samps, z, var.x, var.y, var.xy,
     samps <- if (is.factor(samps)) droplevels(samps) else factor(samps, levels = unique(samps))
     if (any(table(samps) < 2)) stop("Each group needs at least two observations")
 
+    # Check the whole dataset before within-group centering. Between-group
+    # differences can make the combined data full rank despite singular groups.
+    global.x <- stats::cov(X)
+    global.y <- stats::cov(Y)
+
     # Center each group separately so cross-products estimate within-group
     # covariance rather than differences between group means.
     for (group in levels(samps)) {
@@ -88,8 +95,9 @@ prepare_input <- function(X, Y, samps, z, var.x, var.y, var.xy,
   if (!is.null(samps) && nlevels(samps) != groups) stop("Covariance group counts must match samps")
 
   # Shared marginal matrices may be supplied directly or as identical slices.
-  # Positive definiteness ensures whitening and correlation denominators exist.
-  validate_cov <- function(v, size, equal) {
+  # Group matrices may be singular, but not genuinely indefinite.
+  # For covariance-only input, the mean of the slices represents the whole data.
+  validate_cov <- function(v, size, equal, global) {
     if (is.null(v)) v <- diag(size)
     dims <- dim(v)
     if (!is.numeric(v) || !(length(dims) %in% c(2, 3)) ||
@@ -106,18 +114,29 @@ prepare_input <- function(X, Y, samps, z, var.x, var.y, var.xy,
       }
       v <- first
     }
-    for (i in seq_len(if (length(dim(v)) == 3) groups else 1)) {
+    matrices <- lapply(seq_len(if (length(dim(v)) == 3) groups else 1), function(i) {
       m <- if (length(dim(v)) == 3) matrix(v[, , i], size, size) else v
-      if (!isTRUE(all.equal(m, t(m), check.attributes = FALSE)) ||
-        min(eigen(m, symmetric = TRUE, only.values = TRUE)$values) <= 0) {
-        stop("Variance matrices must be symmetric positive definite; remove redundant features or supply regularized covariances")
+      if (!isTRUE(all.equal(m, t(m), check.attributes = FALSE))) {
+        stop("Variance matrices must be symmetric")
       }
+      values <- eigen(m, symmetric = TRUE, only.values = TRUE)$values
+      if (min(values) < -sqrt(.Machine$double.eps) * max(abs(values))) {
+        stop("Group variance matrices must be positive semidefinite")
+      }
+      m
+    })
+    if (is.null(global)) global <- Reduce(`+`, matrices) / length(matrices)
+    if (!covariance_is_pd(global)) {
+      stop("Whole-dataset covariance must be positive definite; remove globally redundant features or supply regularized covariances")
     }
     v
   }
 
-  var.x <- validate_cov(var.x, p, equal_var.x)
-  var.y <- validate_cov(var.y, q, equal_var.y)
+  var.x <- validate_cov(var.x, p, equal_var.x, global.x)
+  var.y <- validate_cov(var.y, q, equal_var.y, global.y)
+  if (is.null(group_names)) group_names <- if (!is.null(samps)) levels(samps) else
+    dimnames(var.xy)[[3]]
+  if (is.null(group_names)) group_names <- as.character(seq_len(groups))
 
   # Standardize varying weights only: constant weights have zero standard
   # deviation and instead represent an equally weighted correlation objective.
@@ -128,7 +147,7 @@ prepare_input <- function(X, Y, samps, z, var.x, var.y, var.xy,
 
   list(
     X = X, Y = Y, samps = samps, z = z,
-    var.x = var.x, var.y = var.y, var.xy = var.xy
+    var.x = var.x, var.y = var.y, var.xy = var.xy, group_names = group_names
   )
 }
 

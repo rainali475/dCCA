@@ -47,10 +47,10 @@ covariance; supplied arrays must have identical slices. Default FALSE.}
 
 \item{equal_var.y}{Assume shared Y covariance, analogous to equal_var.x.}
 
-\item{var.x}{Positive definite X covariance: a shared p-by-p matrix or
+\item{var.x}{Positive semidefinite X covariance: a shared p-by-p matrix or
 a p-by-p-by-group array. Defaults to identity for covariance-only input.}
 
-\item{var.y}{Positive definite Y covariance: a shared q-by-q matrix or
+\item{var.y}{Positive semidefinite Y covariance: a shared q-by-q matrix or
 a q-by-q-by-group array. Defaults to identity for covariance-only input.}
 
 \item{var.xy}{covariance between first and second set of features in each sample.
@@ -91,15 +91,28 @@ the original raw-correlation objective.}
 }
 \value{
 A list with \code{result} (weights \code{a}, \code{b}, group correlations \code{rho},
-objective \code{obj_val}, and iterative diagnostics) and \code{parameters}. For multiple
+objective \code{obj_val}, and iterative diagnostics), \code{parameters}, and
+\code{diagnostics}. For multiple
 iterative components, \code{result} is a list of component results. Closed-form
 weights and correlations are matrices with components in columns.
+The top-level \code{diagnostics$zero_variance} table reports component, evaluation
+source, group, view, and counts of zero-variance divisions avoided across all
+starts and iterations. Undefined group correlations contribute zero during
+fitting and are returned as NA for the selected weights.
 }
 \description{
 Finds common canonical weights maximizing a weighted sum of Fisher-transformed
 group correlations by default. Set fisher.transform = FALSE to optimize raw
 correlations. Sparse fits use alternating optimization and soft thresholding;
 they are heuristic local solutions, so multiple starts are recommended.
+}
+\details{
+Group marginal covariances must be symmetric positive semidefinite,
+but may be singular. Positive definiteness is checked for the whole raw
+dataset before within-group centering, or for the mean marginal covariance
+across groups for covariance-only input. Singular shared covariances use
+numerical optimization instead of closed-form whitening. Zero variance is
+detected with a scale-dependent floating-point tolerance. No ridge is added.
 }
 \examples{
 set.seed(1)

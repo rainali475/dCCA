@@ -8,9 +8,20 @@
 #' @importFrom dplyr %>%
 #' @importFrom stats optim sd
 #' @return A list with `result` (weights `a`, `b`, group correlations `rho`,
-#' objective `obj_val`, and iterative diagnostics) and `parameters`. For multiple
+#' objective `obj_val`, and iterative diagnostics), `parameters`, and
+#' `diagnostics`. For multiple
 #' iterative components, `result` is a list of component results. Closed-form
 #' weights and correlations are matrices with components in columns.
+#' The top-level `diagnostics$zero_variance` table reports component, evaluation
+#' source, group, view, and counts of zero-variance divisions avoided across all
+#' starts and iterations. Undefined group correlations contribute zero during
+#' fitting and are returned as NA for the selected weights.
+#' @details Group marginal covariances must be symmetric positive semidefinite,
+#' but may be singular. Positive definiteness is checked for the whole raw
+#' dataset before within-group centering, or for the mean marginal covariance
+#' across groups for covariance-only input. Singular shared covariances use
+#' numerical optimization instead of closed-form whitening. Zero variance is
+#' detected with a scale-dependent floating-point tolerance. No ridge is added.
 #' @examples
 #' set.seed(1)
 #' X <- list(matrix(rnorm(120), 40, 3), matrix(rnorm(120), 40, 3))
@@ -28,9 +39,9 @@
 #' @param equal_var.x Assume shared X covariance. Raw data use pooled within-group
 #' covariance; supplied arrays must have identical slices. Default FALSE.
 #' @param equal_var.y Assume shared Y covariance, analogous to equal_var.x.
-#' @param var.x Positive definite X covariance: a shared p-by-p matrix or
+#' @param var.x Positive semidefinite X covariance: a shared p-by-p matrix or
 #' a p-by-p-by-group array. Defaults to identity for covariance-only input.
-#' @param var.y Positive definite Y covariance: a shared q-by-q matrix or
+#' @param var.y Positive semidefinite Y covariance: a shared q-by-q matrix or
 #' a q-by-q-by-group array. Defaults to identity for covariance-only input.
 #' @param var.xy covariance between first and second set of features in each sample.
 #' Computed from within-group centered X and Y if not given. Supply a
@@ -120,6 +131,12 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
     fisher.transform = fisher.transform
   )
 
+  diagnostics <- new_diagnostics(prepared$group_names)
+  # A shared but singular within-group covariance can occur even when the
+  # whole dataset is full rank. Use numerical updates instead of whitening it.
+  if (equal_var.x) equal_var.x <- covariance_is_pd(var.x)
+  if (equal_var.y) equal_var.y <- covariance_is_pd(var.y)
+
   # Shared marginal covariance and no sparsity reduce the weighted objective
   # to a single whitened SVD of the weighted cross-covariance matrix.
   if (!fisher.transform && equal_var.x && equal_var.y && is.null(c1) && is.null(c2)) {
@@ -127,7 +144,7 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
     CCA_res <- CCA(A, var.x, var.y, ncc)
 
     params[["method"]] <- "CCA closed form solution"
-    return(list(
+    return(finish_fit(
       result = list(
         a = CCA_res$a,
         b = CCA_res$b,
@@ -139,7 +156,8 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
           )
         }, numeric(n_samps))
       ),
-      parameters = params
+      parameters = params, d = diagnostics,
+      var.x = array_var.x, var.y = array_var.y
     ))
   }
 
@@ -173,15 +191,13 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
     a_inits, b_inits,
     L2_sol_init,
     epsilon, patience, max_iter,
-    solver, solver_eps, fisher.transform = fisher.transform
+    solver, solver_eps, fisher.transform = fisher.transform,
+    diagnostics = diagnostics
   )
 
 
   if (ncc == 1) {
-    return(list(
-      result = dcca_res,
-      parameters = params
-    ))
+    return(finish_fit(dcca_res, params, diagnostics, array_var.x, array_var.y))
   }
 
   # Extract subsequent components from successively deflated cross-covariances.
@@ -198,8 +214,10 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
       array_var.x = array_var.x,
       array_var.y = array_var.y,
       p = p, q = q,
-      n_samps = n_samps
+      n_samps = n_samps, diagnostics = diagnostics
     )
+
+    diagnostics$component <- i
 
     dcca_res <- solve_single_cc(
       p, q, n_samps, z,
@@ -210,14 +228,12 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
       a_inits, b_inits,
       L2_sol_init,
       epsilon, patience, max_iter,
-      solver, solver_eps, fisher.transform = fisher.transform
+      solver, solver_eps, fisher.transform = fisher.transform,
+      diagnostics = diagnostics
     )
 
     res_list[[i]] <- dcca_res
   }
 
-  return(list(
-    result = res_list,
-    parameters = params
-  ))
+  finish_fit(res_list, params, diagnostics, array_var.x, array_var.y)
 }

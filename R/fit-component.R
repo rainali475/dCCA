@@ -7,7 +7,8 @@ solve_single_cc <- function(p, q, n_samps, z,
                             a_inits, b_inits,
                             L2_sol_init,
                             epsilon, patience, max_iter,
-                            solver, solver_eps, fisher.transform = TRUE) {
+                            solver, solver_eps, fisher.transform = TRUE,
+                            diagnostics = NULL) {
   if (L2_sol_init && !(is.null(c1) && is.null(c2))) {
     # Select the best unconstrained fit across starts, then use its weights
     # as the starting point for the sparse fit.
@@ -23,7 +24,7 @@ solve_single_cc <- function(p, q, n_samps, z,
         a_init = a_init, b_init = b_init,
         epsilon = epsilon, patience = patience, max_iter = max_iter,
         solver = solver, solver_eps = solver_eps,
-        fisher.transform = fisher.transform
+        fisher.transform = fisher.transform, diagnostics = diagnostics
       )
     })
 
@@ -42,7 +43,7 @@ solve_single_cc <- function(p, q, n_samps, z,
       a_init = l2_a_init, b_init = l2_b_init,
       epsilon = epsilon, patience = patience, max_iter = max_iter,
       solver = solver, solver_eps = solver_eps,
-      fisher.transform = fisher.transform
+      fisher.transform = fisher.transform, diagnostics = diagnostics
     )
   } else {
     all_dcca_res <- purrr::map2(a_inits, b_inits, function(a_init, b_init) {
@@ -54,7 +55,7 @@ solve_single_cc <- function(p, q, n_samps, z,
         c1, c2,
         a_init, b_init,
         epsilon, patience, max_iter,
-        solver, solver_eps, fisher.transform = fisher.transform
+        solver, solver_eps, fisher.transform = fisher.transform, diagnostics = diagnostics
       )
     })
 

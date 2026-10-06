@@ -105,9 +105,10 @@ fit_cov <- dCCA(
 ```
 
 With raw data, supplied covariances override their empirical counterparts.
-Ensure dimensions and group order match. Marginal covariances must be symmetric
-positive definite. Remove redundant features or supply regularized covariances
-for high dimensional or collinear data. Cross-covariances should be consistent
+Ensure dimensions and group order match. Group marginal covariances may be
+singular but must be symmetric positive semidefinite. Only the whole-dataset
+covariance must be positive definite (raw data before group centering, or the
+mean of supplied covariance slices). Cross-covariances should be consistent
 with the supplied marginals; Fisher clipping does not validate that consistency.
 
 ## Objective and Fisher transformation
@@ -211,6 +212,11 @@ original cross-covariances for all returned correlations.
 `parameters` records covariance inputs used, processed weights z, variance flags,
 sparsity bounds, and the Fisher flag. It records a method description and, where
 applicable, outer and nested solver tolerances. Use `?dCCA` for package help.
+
+`diagnostics$zero_variance` reports affected components, groups, views, evaluation
+stages, and counts across all starts. Undefined group correlations contribute
+zero to the objective and gradient during fitting and are returned as `NA` for
+the selected weights. Check these diagnostics before interpreting a fit.
 
 
 ## License

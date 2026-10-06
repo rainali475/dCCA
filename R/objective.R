@@ -18,34 +18,41 @@ safe_fisher_transform <- function(rho, eps = sqrt(.Machine$double.eps)) {
 }
 
 # Compute a single rho for each sample group based on common canonical vectors
-compute_rho <- function(a, b, var.xy, var.x, var.y) {
+compute_rho <- function(a, b, var.xy, var.x, var.y, diagnostics = NULL) {
   sapply(1:(dim(var.y)[3]), function(samp_i) {
+    vx <- score_variance(a, mat_slice(var.x, samp_i), diagnostics, samp_i, "X")
+    vy <- score_variance(b, mat_slice(var.y, samp_i), diagnostics, samp_i, "Y")
+    if (vx == 0 || vy == 0) return(0)
     sum(a * (mat_slice(var.xy, samp_i) %*% b)) /
-      sqrt(sum(a * (mat_slice(var.x, samp_i) %*% a)) *
-        sum(b * (mat_slice(var.y, samp_i) %*% b)))
+      (sqrt(vx) * sqrt(vy))
   })
 }
 
 # Objective function for maximization
-obj_fn <- function(a, b, z, var.xy, var.x, var.y, fisher.transform = TRUE) {
-  rho <- compute_rho(a, b, var.xy, var.x, var.y)
+obj_fn <- function(a, b, z, var.xy, var.x, var.y, fisher.transform = TRUE,
+                   diagnostics = NULL) {
+  rho <- compute_rho(a, b, var.xy, var.x, var.y, diagnostics)
   if (fisher.transform) rho <- safe_fisher_transform(rho)
   sum(rho * z)
 }
 
 # Gradient with respect to a while b is fixed. Each group contributes the
 # derivative of its covariance numerator and its X-variance denominator.
-obj_gr <- function(a, b, z, var.xy, var.x, var.y, fisher.transform = TRUE) {
+obj_gr <- function(a, b, z, var.xy, var.x, var.y, fisher.transform = TRUE,
+                   diagnostics = NULL) {
   vapply(seq_along(z), function(samp_i) {
     cov_XYb <- mat_slice(var.xy, samp_i) %*% b
     cov_XaYb <- sum(a * cov_XYb)
     cov_XXa <- mat_slice(var.x, samp_i) %*% a
-    var_Xa <- sum(a * cov_XXa)
-    var_Yb <- sum(b * (mat_slice(var.y, samp_i) %*% b))
+    var_Xa <- score_variance(a, mat_slice(var.x, samp_i), diagnostics,
+                            samp_i, "X", "gradient")
+    var_Yb <- score_variance(b, mat_slice(var.y, samp_i), diagnostics,
+                            samp_i, "Y", "gradient")
+    if (var_Xa == 0 || var_Yb == 0) return(rep(0, length(a)))
     grad_weight <- z[samp_i]
 
     if (fisher.transform) {
-      rho <- cov_XaYb / sqrt(var_Xa * var_Yb)
+      rho <- cov_XaYb / (sqrt(var_Xa) * sqrt(var_Yb))
       limit <- 1 - sqrt(.Machine$double.eps)
       # The clipped objective is flat outside its bounds. Inside the bounds,
       # apply the chain rule: d atanh(rho) / d rho = 1 / (1 - rho^2).
@@ -53,7 +60,7 @@ obj_gr <- function(a, b, z, var.xy, var.x, var.y, fisher.transform = TRUE) {
     }
 
     as.vector((cov_XYb - (cov_XaYb / var_Xa * cov_XXa)) *
-      grad_weight / sqrt(var_Xa * var_Yb))
+      grad_weight / (sqrt(var_Xa) * sqrt(var_Yb)))
   }, numeric(length(a))) %>%
     matrix(nrow = length(a)) %>%
     rowSums()

@@ -18,7 +18,8 @@ CCA <- function(var.xy, var.x, var.y, ncc) {
 }
 
 # Equal variance update, solve a with b fixed
-eqvar_dCCA_update <- function(var.xy, var.x, var.y, z, curr_b, c1) {
+eqvar_dCCA_update <- function(var.xy, var.x, var.y, z, curr_b, c1,
+                              diagnostics = NULL) {
   sqrt_varx <- expm::sqrtm(var.x)
   A <- apply(var.xy, MARGIN = 3, function(var.xyi) {
     solve(sqrt_varx, var.xyi %*% curr_b)
@@ -27,7 +28,8 @@ eqvar_dCCA_update <- function(var.xy, var.x, var.y, z, curr_b, c1) {
   B <- sapply(1:dim(var.xy)[3], function(samp_i) {
     var.yi <- var.y[, , samp_i]
     if (length(dim(var.y)) != 3) var.yi <- var.y
-    z[samp_i] / sqrt(sum(curr_b * (var.yi %*% curr_b)))
+    variance <- score_variance(curr_b, var.yi, diagnostics, samp_i, "Y", "update")
+    if (variance == 0) 0 else z[samp_i] / sqrt(variance)
   })
 
   # Combine the whitened cross-covariance directions using group weights
@@ -49,14 +51,15 @@ eqvar_dCCA_update <- function(var.xy, var.x, var.y, z, curr_b, c1) {
 
 # Unequal variance update, solve a with b fixed
 dCCA_update <- function(init_a, var.xy, array_var.x, array_var.y, z, curr_b, c1,
-                        solver, solver_eps, fisher.transform = TRUE) {
+                        solver, solver_eps, fisher.transform = TRUE,
+                            diagnostics = NULL) {
   pos_fn <- function(a) obj_fn(
     a, curr_b, z, var.xy, array_var.x, array_var.y,
-    fisher.transform = fisher.transform
+    fisher.transform = fisher.transform, diagnostics = diagnostics
   )
   pos_gr <- function(a) obj_gr(
     a, curr_b, z, var.xy, array_var.x, array_var.y,
-    fisher.transform = fisher.transform
+    fisher.transform = fisher.transform, diagnostics = diagnostics
   )
 
   # optim minimizes by default; fnscale = -1 maximizes the correlation sum.
@@ -89,6 +92,7 @@ dCCA_update <- function(init_a, var.xy, array_var.x, array_var.y, z, curr_b, c1,
   }
 
   # Correlations are scale invariant, so normalize before imposing sparsity.
+  if (sum(pos_res$par^2) == 0) pos_res$par <- init_a
   curr_a <- pos_res$par / norm(pos_res$par, type = "2")
 
   if (!is.null(c1)) {
@@ -107,7 +111,8 @@ iteratively_solve_CCA <- function(p, q, n_samps, z,
                                   c1, c2,
                                   a_init, b_init,
                                   epsilon, patience, max_iter,
-                                  solver, solver_eps, fisher.transform = TRUE) {
+                                  solver, solver_eps, fisher.transform = TRUE,
+                            diagnostics = NULL) {
   curr_a <- a_init / norm(a_init, type = "2")
   curr_b <- b_init / norm(b_init, type = "2")
 
@@ -133,7 +138,7 @@ iteratively_solve_CCA <- function(p, q, n_samps, z,
   obj_val <- obj_fn(
     a = curr_a, b = curr_b, z = z, var.xy = var.xy,
     var.x = array_var.x, var.y = array_var.y,
-    fisher.transform = fisher.transform
+    fisher.transform = fisher.transform, diagnostics = diagnostics
   )
 
   # Sparse thresholding can lower the objective. Keep the best weights
@@ -141,7 +146,7 @@ iteratively_solve_CCA <- function(p, q, n_samps, z,
   last_best_res <- list(
     a = curr_a,
     b = curr_b,
-    rho = compute_rho(curr_a, curr_b, var.xy, array_var.x, array_var.y),
+    rho = compute_rho(curr_a, curr_b, var.xy, array_var.x, array_var.y, diagnostics),
     obj_val = obj_val[length(obj_val)],
     n_iter = n_iter,
     convergence = convergence,
@@ -153,8 +158,9 @@ iteratively_solve_CCA <- function(p, q, n_samps, z,
 
   while ((!convergence) && (wait <= patience) && (n_iter < max_iter)) {
     # Fix b, update a
+    if (!is.null(diagnostics)) diagnostics$swapped <- FALSE
     if (equal_var.x && !fisher.transform) {
-      curr_a <- eqvar_dCCA_update(var.xy, var.x, array_var.y, z, curr_b, c1)
+      curr_a <- eqvar_dCCA_update(var.xy, var.x, array_var.y, z, curr_b, c1, diagnostics)
     } else {
       curr_a <- dCCA_update(
         init_a = curr_a,
@@ -166,14 +172,15 @@ iteratively_solve_CCA <- function(p, q, n_samps, z,
         c1 = c1,
         solver = solver,
         solver_eps = solver_eps,
-        fisher.transform = fisher.transform
+        fisher.transform = fisher.transform, diagnostics = diagnostics
       )
     }
     a_record <- rbind(a_record, curr_a)
 
     # Fix a, update b
+    if (!is.null(diagnostics)) diagnostics$swapped <- TRUE
     if (equal_var.y && !fisher.transform) {
-      curr_b <- eqvar_dCCA_update(var.yx, var.y, array_var.x, z, curr_a, c2)
+      curr_b <- eqvar_dCCA_update(var.yx, var.y, array_var.x, z, curr_a, c2, diagnostics)
     } else {
       curr_b <- dCCA_update(
         init_a = curr_b,
@@ -185,14 +192,15 @@ iteratively_solve_CCA <- function(p, q, n_samps, z,
         c1 = c2,
         solver = solver,
         solver_eps = solver_eps,
-        fisher.transform = fisher.transform
+        fisher.transform = fisher.transform, diagnostics = diagnostics
       )
     }
     b_record <- rbind(b_record, curr_b)
+    if (!is.null(diagnostics)) diagnostics$swapped <- FALSE
 
     curr_obj_val <- obj_fn(
       curr_a, curr_b, z, var.xy, array_var.x, array_var.y,
-      fisher.transform = fisher.transform
+      fisher.transform = fisher.transform, diagnostics = diagnostics
     )
     obj_val <- c(obj_val, curr_obj_val)
 
@@ -211,7 +219,7 @@ iteratively_solve_CCA <- function(p, q, n_samps, z,
       last_best_res <- list(
         a = curr_a,
         b = curr_b,
-        rho = compute_rho(curr_a, curr_b, var.xy, array_var.x, array_var.y),
+        rho = compute_rho(curr_a, curr_b, var.xy, array_var.x, array_var.y, diagnostics),
         obj_val = obj_val[length(obj_val)],
         n_iter = n_iter,
         convergence = convergence,
