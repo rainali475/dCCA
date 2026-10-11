@@ -138,16 +138,21 @@ prepare_input <- function(X, Y, samps, z, var.x, var.y, var.xy,
     dimnames(var.xy)[[3]]
   if (is.null(group_names)) group_names <- as.character(seq_len(groups))
 
-  # Standardize varying weights only: constant weights have zero standard
-  # deviation and instead represent an equally weighted correlation objective.
-  if (is.null(z)) z <- rep(1, groups)
-  if (!is.numeric(z) || length(z) != groups || any(!is.finite(z))) stop("z requires one finite numeric weight per group")
-  if (groups > 1 && stats::sd(z) > 0) z <- (z - mean(z)) / stats::sd(z)
-  if (all(z == 0)) stop("z must contain a nonzero weight")
+  # NULL preserves the equal-weight objective. Every supplied covariate,
+  # including a vector, instead uses optimized unit-length group weights.
+  covariates <- NULL
+  if (is.null(z)) {
+    z <- rep(1, groups)
+  } else {
+    covariates <- prepare_covariates(
+      if (is.null(dim(z))) matrix(z, ncol = 1) else z, groups
+    )
+    z <- covariates$basis[, 1]
+  }
 
   list(
     X = X, Y = Y, samps = samps, z = z,
-    var.x = var.x, var.y = var.y, var.xy = var.xy, group_names = group_names
+    var.x = var.x, var.y = var.y, var.xy = var.xy, group_names = group_names, covariates = covariates
   )
 }
 

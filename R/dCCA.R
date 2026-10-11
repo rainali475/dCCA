@@ -15,8 +15,17 @@
 #' The top-level `diagnostics$zero_variance` table reports component, evaluation
 #' source, group, view, and counts of zero-variance divisions avoided across all
 #' starts and iterations. Undefined group correlations contribute zero during
-#' fitting and are returned as NA for the selected weights.
-#' @details Group marginal covariances must be symmetric positive semidefinite,
+#' fitting and are returned as NA for the selected weights. Covariate fits also
+#' return `lambda`, `group_weights`, and `lambda_record` in each component.
+#' Coefficients correspond to retained standardized columns; preprocessing and
+#' rank are recorded in `parameters$covariates`.
+#' @details Covariate fits alternate updates of a, b, and lambda. For fixed
+#' a and b, lambda = (Z'Z)^+ Z' f(rho) / sqrt(f(rho)' Z (Z'Z)^+ Z' f(rho)),
+#' where f is the selected raw or clipped Fisher transform. An SVD computes
+#' the Moore-Penrose solution without forming Z'Z. Rank-deficient designs use
+#' minimum-norm coefficients. If the projection is zero, retain the previous
+#' feasible lambda, or initialize from the first left singular vector.
+#' Group marginal covariances must be symmetric positive semidefinite,
 #' but may be singular. Positive definiteness is checked for the whole raw
 #' dataset before within-group centering, or for the mean marginal covariance
 #' across groups for covariance-only input. Singular shared covariances use
@@ -27,9 +36,12 @@
 #' X <- list(matrix(rnorm(120), 40, 3), matrix(rnorm(120), 40, 3))
 #' Y <- lapply(X, function(x) x + matrix(rnorm(120), 40, 3))
 #' fit <- dCCA(X = X, Y = Y, z = c(-1, 1), max_iter = 20)
-#' @param z a vector of length n_samps indicating sample groups features.
-#' NULL gives equal weights; otherwise supply one finite value per group.
-#' Nonconstant weights are standardized; constant weights are used unchanged.
+#' @param z Numeric vector, matrix, or data frame of group-level covariates,
+#' with one row per group. Columns are centered and scaled by sample standard
+#' deviation; constant columns are removed (an error if none remain). A vector
+#' is a one-column covariate matrix. NULL retains fixed equal group weights.
+#' Supplied covariates optimize group weights Z %*% lambda under
+#' lambda' Z' Z lambda = 1, including for vector input.
 #' @param X Numeric matrix, data frame, or list of paired group matrices with rows being observations and columns
 #' being first set of features. Either X and Y or var.xy need to be provided
 #' @param Y Numeric matrix, data frame, or list matching X with rows being observations and columns
@@ -89,6 +101,7 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
   Y <- prepared$Y
   samps <- prepared$samps
   z <- prepared$z
+  covariates <- prepared$covariates
   var.x <- prepared$var.x
   var.y <- prepared$var.y
   var.xy <- prepared$var.xy
@@ -103,7 +116,7 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
   p <- ifelse(is.null(X), nrow(var.xy), ncol(X))
   q <- ifelse(is.null(Y), ncol(var.xy), ncol(Y))
 
-  # Group weights are validated and standardized by prepare_input().
+  # Group covariates and initial weights are prepared by prepare_input().
   n_samps <- length(z)
 
   var_args <- get_var(
@@ -131,6 +144,11 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
     fisher.transform = fisher.transform
   )
 
+  if (!is.null(covariates)) {
+    params$covariates <- covariates[c("Z", "rank", "center", "scale",
+                                       "retained_columns", "dropped_columns", "column_names")]
+  }
+
   diagnostics <- new_diagnostics(prepared$group_names)
   # A shared but singular within-group covariance can occur even when the
   # whole dataset is full rank. Use numerical updates instead of whitening it.
@@ -139,7 +157,7 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
 
   # Shared marginal covariance and no sparsity reduce the weighted objective
   # to a single whitened SVD of the weighted cross-covariance matrix.
-  if (!fisher.transform && equal_var.x && equal_var.y && is.null(c1) && is.null(c2)) {
+  if (is.null(covariates) && !fisher.transform && equal_var.x && equal_var.y && is.null(c1) && is.null(c2)) {
     A <- apply(var.xy, MARGIN = c(1, 2), function(x) sum(x * z))
     CCA_res <- CCA(A, var.x, var.y, ncc)
 
@@ -177,7 +195,7 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
   names(method_param) <- c("a", "b")
 
   params[["epsilon"]] <- epsilon
-  if (fisher.transform || !equal_var.x || !equal_var.y) {
+  if (!is.null(covariates) || fisher.transform || !equal_var.x || !equal_var.y) {
     params[["method"]] <- method_param
     params[["solver_eps"]] <- solver_eps
   }
@@ -192,7 +210,7 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
     L2_sol_init,
     epsilon, patience, max_iter,
     solver, solver_eps, fisher.transform = fisher.transform,
-    diagnostics = diagnostics
+    diagnostics = diagnostics, covariates = covariates
   )
 
 
@@ -229,7 +247,7 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
       L2_sol_init,
       epsilon, patience, max_iter,
       solver, solver_eps, fisher.transform = fisher.transform,
-      diagnostics = diagnostics
+      diagnostics = diagnostics, covariates = covariates
     )
 
     res_list[[i]] <- dcca_res

@@ -113,14 +113,32 @@ with the supplied marginals; Fisher clipping does not validate that consistency.
 
 ## Objective and Fisher transformation
 
-By default, the objective is `sum(z * atanh(rho))`, where `rho` contains one
-correlation per group. Set `fisher.transform = FALSE` to maximize the raw
-correlation objective `sum(z * rho)` instead. `z = NULL` uses weights of one. Otherwise supply one finite numeric
-weight per group. Nonconstant weights are centered and divided by their sample
-standard deviation; constant nonzero weights remain unchanged. All-zero weights
-are rejected. Thus the magnitude of a nonconstant input z is not preserved.
-Positive weights favor positive correlations; negative weights favor negative
-correlations. Every group contributes once, regardless of its observation count.
+With `z = NULL`, the objective is `sum(atanh(rho))` (or `sum(rho)`
+when `fisher.transform = FALSE`). Supply a vector, matrix, or numeric data frame
+of covariates with one row per group to optimize `sum((Z %*% lambda) * f(rho))`
+subject to `lambda' Z' Z lambda = 1`. Columns are centered and divided by their
+sample standard deviations; constant columns are removed, with an error if none
+remain. A vector and a one-column matrix give the same fit.
+
+Covariate fits update `a`, `b`, and `lambda` in turns. Lambda has a closed-form
+Moore-Penrose update, so redundant columns are allowed. Coefficients are
+minimum-norm values for standardized retained columns. If the projected target
+is zero, the previous feasible lambda is retained. Multiple starts are recommended.
+
+**Compatibility:** supplied vector `z` now optimizes its coefficient and can
+reverse the contrast sign. Its fitted group weights have unit L2 norm rather
+than the previous fixed standardized-vector scaling. Use `z = NULL` for equal
+fixed weights.
+
+```r
+Z <- cbind(age = c(30, 40, 50), dose = c(0, 1, 0))
+xy <- array(c(diag(c(.2, .1)), diag(c(.5, .2)), diag(c(.8, .3))),
+            dim = c(2, 2, 3))
+fit_multi <- dCCA(var.xy = xy, z = Z)
+fit_multi$result$lambda
+fit_multi$result$group_weights
+fit_multi$parameters$covariates
+```
 
 ```r
 fit_fisher <- dCCA(
@@ -128,7 +146,7 @@ fit_fisher <- dCCA(
 )
 ```
 
-`fisher.transform = TRUE` maximizes `sum(z * atanh(rho))`. This emphasizes
+`fisher.transform = TRUE` uses Fisher-transformed correlations in the objective. This emphasizes
 correlation differences near -1 and 1 more strongly. Before transformation,
 correlations are clipped to `+/- (1 - sqrt(.Machine$double.eps))` to avoid
 infinite objectives. The analytic gradient applies the Fisher chain rule inside
@@ -147,7 +165,7 @@ set `fisher.transform = FALSE` to use the original fitting path.
 | --- | --- | --- |
 | `X`, `Y` | `NULL` | Paired lists, matrices, or numeric data frames; supply both together. |
 | `samps` | `NULL` | Row group labels for matrix inputs; omit for lists. |
-| `z` | `NULL` | Equal group weights by default; otherwise one weight per group, standardized when nonconstant. |
+| `z` | `NULL` | Fixed equal weights when NULL; otherwise group-by-covariate data (a vector is one column), standardized before optimizing lambda. |
 | `var.xy` | `NULL` | Supplied cross-covariance matrix or array; otherwise estimated from raw data. |
 | `var.x`, `var.y` | `NULL` | Supplied marginal matrices or arrays; empirical with raw data, identity without raw data. |
 | `equal_var.x`, `equal_var.y` | `FALSE` | Use a shared marginal covariance in that view. Raw-data estimates pool centered cross-products using denominator total rows minus group count. Supplied arrays must contain identical slices. |
@@ -177,7 +195,7 @@ fit_sparse <- dCCA(
 
 Soft thresholding and alternating optimization are heuristic local methods.
 Multiple starts can reach different solutions. The best objective across starts
-and iterates is retained; sparse updates can reduce the objective. When both
+and iterates is retained; sparse updates can reduce the objective. When `z = NULL`, both
 marginal covariances are shared, sparsity is disabled, and Fisher mode is off,
 a whitened SVD gives the closed-form fit. Otherwise weights are updated in
 alternation, using shared-covariance closed-form updates where applicable.
@@ -194,6 +212,7 @@ The return value has `result` and `parameters`. For one iterative component,
 `result` contains:
 
 - `a`, `b`: unit L2 feature-weight vectors from the best iterate.
+- `lambda`, `group_weights`, `lambda_record`: covariate coefficients, fitted unit L2 group weights, and coefficient history, when z is supplied.
 - `rho`: raw correlations for each group, in input group order.
 - `obj_val`: the selected raw or Fisher objective at those weights.
 - `n_iter`: total completed outer iterations, not the best-iterate index.
@@ -209,9 +228,10 @@ a group-by-component `rho` matrix, and a vector `obj_val` of weighted-objective
 singular values; iterative histories are absent. The closed-form path uses the
 original cross-covariances for all returned correlations.
 
-`parameters` records covariance inputs used, processed weights z, variance flags,
+`parameters` records covariance inputs used, initial group weights z, variance flags,
 sparsity bounds, and the Fisher flag. It records a method description and, where
-applicable, outer and nested solver tolerances. Use `?dCCA` for package help.
+applicable, outer and nested solver tolerances. `parameters$covariates` records
+the standardized design, rank, centers, scales, and retained/dropped column indices. Use `?dCCA` for package help.
 
 `diagnostics$zero_variance` reports affected components, groups, views, evaluation
 stages, and counts across all starts. Undefined group correlations contribute

@@ -44,7 +44,7 @@ The generating loadings are never passed to dCCA.
 ## Fit common canonical weights
 
 List elements are paired by position. `z = c(-1, 1)` contrasts the weak and
-strong groups; dCCA standardizes these weights to approximately
+strong groups; dCCA standardizes the covariate and fits unit-length group weights of approximately
 `c(-0.707, 0.707)`. We leave `c1` and `c2` unset, giving dense weights without
 L1 constraints. Eight paired starts reduce dependence on one initialization.
 The default objective uses Fisher-transformed correlations; a second fit
@@ -142,7 +142,7 @@ scores <- lapply(seq_along(X), function(i) {
 })
 score_rho <- vapply(scores, function(s) cor(s[, 1], s[, 2]), numeric(1))
 stopifnot(isTRUE(all.equal(score_rho, unname(fit$result$rho), tolerance = 1e-9)))
-stopifnot(abs(sum(fit$parameters$z * atanh(score_rho)) - fit$result$obj_val) < 1e-9)
+stopifnot(abs(sum(fit$result$group_weights * atanh(score_rho)) - fit$result$obj_val) < 1e-9)
 data.frame(group = names(X), correlation = score_rho)
 ```
 
@@ -188,9 +188,9 @@ transformation; this example is far from those boundaries.
 
 ```{r objective-calculation}
 data.frame(
-  group = names(X), z = fit$parameters$z,
+  group = names(X), z = fit$result$group_weights,
   rho = score_rho, fisher_rho = atanh(score_rho),
-  contribution = fit$parameters$z * atanh(score_rho)
+  contribution = fit$result$group_weights * atanh(score_rho)
 )
 fit$result$obj_val
 fit$result$n_iter
@@ -207,7 +207,7 @@ plot(seq_along(trace) - 1, trace, type = "o", pch = 16, cex = .6,
 abline(h = fit$result$obj_val, col = muted, lty = 3)
 legend("bottomright", legend = sprintf("%d iterations; convergence = %s",
        fit$result$n_iter, fit$result$convergence), bty = "n", cex = .85, text.col = muted)
-z <- fit$parameters$z
+z <- fit$result$group_weights
 fisher_rho <- atanh(score_rho)
 contribution <- z * fisher_rho
 barplot(contribution, names.arg = c("Weak group", "Strong group"),
@@ -221,7 +221,7 @@ for (i in 1:2) {
 }
 mtext("Fitting and calculating the differential objective", outer = TRUE,
       side = 3, line = 2.4, font = 2, cex = 1.45, col = navy)
-mtext("Input z = (-1, +1) is standardized to (-0.707, +0.707); dense weights are estimated with CG.",
+mtext("Input z = (-1, +1) yields unit-length fitted weights; dense weights are estimated with CG.",
       outer = TRUE, side = 3, line = .8, cex = .95, col = muted)
 mtext(sprintf("J = %.3f  |  Raw-objective fit on the same data: rho = (%.3f, %.3f)",
       fit$result$obj_val, raw$result$rho[1], raw$result$rho[2]), outer = TRUE,

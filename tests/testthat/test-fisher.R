@@ -4,7 +4,7 @@ test_that("Fisher transformation clips endpoints and uses raw correlations", {
   expect_equal(transformed[2:4], atanh(c(-.5, 0, .5)))
   expect_equal(transformed, -rev(transformed))
 
-  fit <- dCCA(var.xy = array(c(.8, .4), c(1, 1, 2)), z = c(1, 1),
+  fit <- dCCA(var.xy = array(c(.8, .4), c(1, 1, 2)), z = NULL,
               equal_var.x = TRUE, equal_var.y = TRUE, fisher.transform = TRUE)
   expect_equal(fit$result$rho, c(.8, .4))
   expect_equal(fit$result$obj_val, sum(atanh(c(.8, .4))))

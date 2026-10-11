@@ -22,8 +22,8 @@ test_that("list and matrix inputs agree and centering removes offsets", {
   expect_lte(fit$result$n_iter, 20)
 })
 
-test_that("constant weights and sparse tied vectors stay finite", {
-  fit <- dCCA(var.xy = array(c(.8, .4), c(1, 1, 2)), z = c(1, 1),
+test_that("equal default weights and sparse tied vectors stay finite", {
+  fit <- dCCA(var.xy = array(c(.8, .4), c(1, 1, 2)), z = NULL,
               equal_var.x = TRUE, equal_var.y = TRUE)
   expect_equal(as.vector(fit$result$rho), c(.8, .4))
   sparse <- dCCA:::search_delta(c(-1, 1), 1)$output
@@ -34,7 +34,7 @@ test_that("constant weights and sparse tied vectors stay finite", {
 
 test_that("invalid inputs fail before optimization", {
   expect_error(dCCA(), "Supply")
-  expect_error(dCCA(var.xy = diag(2), z = c(1, 2)), "one finite")
+  expect_error(dCCA(var.xy = diag(2), z = c(1, 2)), "one row")
   expect_error(dCCA(var.xy = diag(2), c1 = .5), "L1")
   expect_error(dCCA(var.xy = diag(2), ncc = 3), "ncc")
   expect_error(dCCA(var.xy = diag(2), var.x = matrix(0, 2, 2)), "positive definite")

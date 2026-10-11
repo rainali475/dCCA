@@ -3,7 +3,7 @@ test_that("constant group features are allowed when the whole data are full rank
   X <- list(first = cbind(t, 0), second = cbind(0, t))
   Y <- list(first = cbind(t + sin(t), 0), second = cbind(0, t + cos(t)))
   for (fisher in c(FALSE, TRUE)) for (solver in c("CG", "Nelder-Mead")) {
-    fit <- dCCA(X = X, Y = Y, z = c(1, 1), c1 = 1, c2 = 1,
+    fit <- dCCA(X = X, Y = Y, z = NULL, c1 = 1, c2 = 1,
                 a_inits = list(c(1, 0)), b_inits = list(c(1, 0)),
                 fisher.transform = fisher, solver = solver, max_iter = 5)
     expect_true(fit$diagnostics$zero_variance_encountered)
@@ -20,7 +20,7 @@ test_that("constant group features are allowed when the whole data are full rank
 test_that("complementary collinear group covariances have positive definite mean", {
   vx <- array(c(matrix(1, 2, 2), matrix(c(1, -1, -1, 1), 2)), c(2, 2, 2))
   xy <- .4 * vx
-  fit <- dCCA(var.xy = xy, var.x = vx, var.y = vx, z = c(1, 1), max_iter = 10)
+  fit <- dCCA(var.xy = xy, var.x = vx, var.y = vx, z = NULL, max_iter = 10)
   expect_true(is.finite(fit$result$obj_val))
   expect_true(fit$diagnostics$zero_variance_encountered)
   expect_error(dCCA(var.xy = xy, var.x = array(rep(matrix(1, 2, 2), 2), c(2, 2, 2)),

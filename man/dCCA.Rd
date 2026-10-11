@@ -29,9 +29,12 @@ dCCA(
 )
 }
 \arguments{
-\item{z}{a vector of length n_samps indicating sample groups features.
-NULL gives equal weights; otherwise supply one finite value per group.
-Nonconstant weights are standardized; constant weights are used unchanged.}
+\item{z}{Numeric vector, matrix, or data frame of group-level covariates,
+with one row per group. Columns are centered and scaled by sample standard
+deviation; constant columns are removed (an error if none remain). A vector
+is a one-column covariate matrix. NULL retains fixed equal group weights.
+Supplied covariates optimize group weights Z \%*\% lambda under
+lambda' Z' Z lambda = 1, including for vector input.}
 
 \item{X}{Numeric matrix, data frame, or list of paired group matrices with rows being observations and columns
 being first set of features. Either X and Y or var.xy need to be provided}
@@ -98,7 +101,10 @@ weights and correlations are matrices with components in columns.
 The top-level \code{diagnostics$zero_variance} table reports component, evaluation
 source, group, view, and counts of zero-variance divisions avoided across all
 starts and iterations. Undefined group correlations contribute zero during
-fitting and are returned as NA for the selected weights.
+fitting and are returned as NA for the selected weights. Covariate fits also
+return \code{lambda}, \code{group_weights}, and \code{lambda_record} in each component.
+Coefficients correspond to retained standardized columns; preprocessing and
+rank are recorded in \code{parameters$covariates}.
 }
 \description{
 Finds common canonical weights maximizing a weighted sum of Fisher-transformed
@@ -107,6 +113,12 @@ correlations. Sparse fits use alternating optimization and soft thresholding;
 they are heuristic local solutions, so multiple starts are recommended.
 }
 \details{
+Covariate fits alternate updates of a, b, and lambda. For fixed
+a and b, lambda = (Z'Z)^+ Z' f(rho) / sqrt(f(rho)' Z (Z'Z)^+ Z' f(rho)),
+where f is the selected raw or clipped Fisher transform. An SVD computes
+the Moore-Penrose solution without forming Z'Z. Rank-deficient designs use
+minimum-norm coefficients. If the projection is zero, retain the previous
+feasible lambda, or initialize from the first left singular vector.
 Group marginal covariances must be symmetric positive semidefinite,
 but may be singular. Positive definiteness is checked for the whole raw
 dataset before within-group centering, or for the mean marginal covariance
