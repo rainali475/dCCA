@@ -25,7 +25,8 @@ dCCA(
   solver = c("CG", "Nelder-Mead"),
   solver_eps = 1e-06,
   ncc = 1,
-  fisher.transform = TRUE
+  fisher.transform = TRUE,
+  use_cpp = TRUE
 )
 }
 \arguments{
@@ -91,6 +92,11 @@ Correlations are clipped to +/- (1 - sqrt(.Machine$double.eps)) before
 transformation. Returned rho values and covariance deflation remain on the
 raw correlation scale. Default TRUE uses the Fisher objective; FALSE selects
 the original raw-correlation objective.}
+
+\item{use_cpp}{Logical scalar. Use compiled covariance kernels for objective,
+gradient, correlation, variance diagnostics, and deflation calculations.
+Default TRUE; FALSE uses the reference R implementations. Optimization and
+zero-variance policies are the same for both backends.}
 }
 \value{
 A list with \code{result} (weights \code{a}, \code{b}, group correlations \code{rho},

@@ -7,6 +7,8 @@
 #' @export
 #' @importFrom dplyr %>%
 #' @importFrom stats optim sd
+#' @importFrom Rcpp evalCpp
+#' @useDynLib dCCA, .registration = TRUE
 #' @return A list with `result` (weights `a`, `b`, group correlations `rho`,
 #' objective `obj_val`, and iterative diagnostics), `parameters`, and
 #' `diagnostics`. For multiple
@@ -78,6 +80,10 @@
 #' transformation. Returned rho values and covariance deflation remain on the
 #' raw correlation scale. Default TRUE uses the Fisher objective; FALSE selects
 #' the original raw-correlation objective.
+#' @param use_cpp Logical scalar. Use compiled covariance kernels for objective,
+#' gradient, correlation, variance diagnostics, and deflation calculations.
+#' Default TRUE; FALSE uses the reference R implementations. Optimization and
+#' zero-variance policies are the same for both backends.
 dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
                  equal_var.x = FALSE, equal_var.y = FALSE,
                  var.x = NULL, var.y = NULL, var.xy = NULL,
@@ -86,7 +92,11 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
                  L2_sol_init = FALSE,
                  epsilon = 1e-6, patience = 10, max_iter = 1000,
                  solver = c("CG", "Nelder-Mead"),
-                 solver_eps = 1e-6, ncc = 1, fisher.transform = TRUE) {
+                 solver_eps = 1e-6, ncc = 1, fisher.transform = TRUE,
+                 use_cpp = TRUE) {
+  if (!is.logical(use_cpp) || length(use_cpp) != 1L || is.na(use_cpp)) {
+    stop("use_cpp must be a single logical value")
+  }
   if (!is.logical(fisher.transform) || length(fisher.transform) != 1L ||
       is.na(fisher.transform)) {
     stop("fisher.transform must be a single logical value")
@@ -141,7 +151,8 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
     equal_var.y = equal_var.y,
     c1 = c1,
     c2 = c2,
-    fisher.transform = fisher.transform
+    fisher.transform = fisher.transform,
+    use_cpp = use_cpp
   )
 
   if (!is.null(covariates)) {
@@ -149,7 +160,7 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
                                        "retained_columns", "dropped_columns", "column_names")]
   }
 
-  diagnostics <- new_diagnostics(prepared$group_names)
+  diagnostics <- new_diagnostics(prepared$group_names, use_cpp = use_cpp)
   # A shared but singular within-group covariance can occur even when the
   # whole dataset is full rank. Use numerical updates instead of whitening it.
   if (equal_var.x) equal_var.x <- covariance_is_pd(var.x)
@@ -170,7 +181,7 @@ dCCA <- function(z = NULL, X = NULL, Y = NULL, samps = NULL,
         rho = vapply(seq_len(ncc), function(k) {
           compute_rho(
             CCA_res$a[, k], CCA_res$b[, k], var.xy,
-            array_var.x, array_var.y
+            array_var.x, array_var.y, use_cpp = use_cpp
           )
         }, numeric(n_samps))
       ),

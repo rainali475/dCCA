@@ -4,3 +4,6 @@
 AGENTS.md
 DEVELOPMENT.md
 .vignette-preview/
+src/*.o
+src/*.dll
+src/*.so

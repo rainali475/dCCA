@@ -18,8 +18,15 @@ safe_fisher_transform <- function(rho, eps = sqrt(.Machine$double.eps)) {
 }
 
 # Compute a single rho for each sample group based on common canonical vectors
-compute_rho <- function(a, b, var.xy, var.x, var.y, diagnostics = NULL) {
-  sapply(1:(dim(var.y)[3]), function(samp_i) {
+compute_rho <- function(a, b, var.xy, var.x, var.y, diagnostics = NULL,
+                        use_cpp = covariance_use_cpp(diagnostics)) {
+  groups <- if (length(dim(var.xy)) == 3L) dim(var.xy)[3] else 1L
+  if (use_cpp) {
+    result <- covariance_kernel(a, b, var.xy, var.x, var.y, rep(0, groups), FALSE)
+    record_kernel_zeros(result, diagnostics)
+    return(result$rho)
+  }
+  sapply(seq_len(groups), function(samp_i) {
     vx <- score_variance(a, mat_slice(var.x, samp_i), diagnostics, samp_i, "X")
     vy <- score_variance(b, mat_slice(var.y, samp_i), diagnostics, samp_i, "Y")
     if (vx == 0 || vy == 0) return(0)
@@ -30,8 +37,13 @@ compute_rho <- function(a, b, var.xy, var.x, var.y, diagnostics = NULL) {
 
 # Objective function for maximization
 obj_fn <- function(a, b, z, var.xy, var.x, var.y, fisher.transform = TRUE,
-                   diagnostics = NULL) {
-  rho <- compute_rho(a, b, var.xy, var.x, var.y, diagnostics)
+                   diagnostics = NULL, use_cpp = covariance_use_cpp(diagnostics)) {
+  if (use_cpp) {
+    result <- covariance_kernel(a, b, var.xy, var.x, var.y, z, fisher.transform)
+    record_kernel_zeros(result, diagnostics)
+    return(result$objective)
+  }
+  rho <- compute_rho(a, b, var.xy, var.x, var.y, diagnostics, use_cpp = FALSE)
   if (fisher.transform) rho <- safe_fisher_transform(rho)
   sum(rho * z)
 }
@@ -39,7 +51,13 @@ obj_fn <- function(a, b, z, var.xy, var.x, var.y, fisher.transform = TRUE,
 # Gradient with respect to a while b is fixed. Each group contributes the
 # derivative of its covariance numerator and its X-variance denominator.
 obj_gr <- function(a, b, z, var.xy, var.x, var.y, fisher.transform = TRUE,
-                   diagnostics = NULL) {
+                   diagnostics = NULL, use_cpp = covariance_use_cpp(diagnostics)) {
+  if (use_cpp) {
+    result <- covariance_kernel(a, b, var.xy, var.x, var.y, z,
+                                 fisher.transform, need_gradient = TRUE)
+    record_kernel_zeros(result, diagnostics, "gradient")
+    return(result$gradient)
+  }
   vapply(seq_along(z), function(samp_i) {
     cov_XYb <- mat_slice(var.xy, samp_i) %*% b
     cov_XaYb <- sum(a * cov_XYb)

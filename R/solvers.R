@@ -25,12 +25,13 @@ eqvar_dCCA_update <- function(var.xy, var.x, var.y, z, curr_b, c1,
     solve(sqrt_varx, var.xyi %*% curr_b)
   }, simplify = FALSE)
 
-  B <- sapply(1:dim(var.xy)[3], function(samp_i) {
-    var.yi <- var.y[, , samp_i]
-    if (length(dim(var.y)) != 3) var.yi <- var.y
-    variance <- score_variance(curr_b, var.yi, diagnostics, samp_i, "Y", "update")
-    if (variance == 0) 0 else z[samp_i] / sqrt(variance)
-  })
+  variance <- score_variance_groups(curr_b, var.y, dim(var.xy)[3],
+                                    covariance_use_cpp(diagnostics))
+  for (g in which(variance == 0))
+    record_zero_variance(diagnostics, g, "Y", "update")
+  B <- numeric(length(z))
+  valid <- variance > 0
+  B[valid] <- z[valid] / sqrt(variance[valid])
 
   # Combine the whitened cross-covariance directions using group weights
   # adjusted for the variance of the fixed Y score.

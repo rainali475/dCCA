@@ -1,7 +1,14 @@
 # Remove the previous component's rank-one contribution within each group.
 # Marginal covariances stay fixed while cross-covariances are deflated.
 deflate_cov <- function(last_var.xy, last_a, last_b, last_rho, array_var.x, array_var.y,
-                        p, q, n_samps, diagnostics = NULL) {
+                        p, q, n_samps, diagnostics = NULL,
+                        use_cpp = covariance_use_cpp(diagnostics)) {
+  if (use_cpp) {
+    result <- deflate_covariance_kernel(last_var.xy, last_a, last_b, last_rho,
+                                        array_var.x, array_var.y)
+    record_kernel_zeros(result, diagnostics, "deflation")
+    return(result$covariance)
+  }
   sapply(1:n_samps, function(i) {
     vx <- score_variance(last_a, mat_slice(array_var.x, i), diagnostics, i, "X", "deflation")
     vy <- score_variance(last_b, mat_slice(array_var.y, i), diagnostics, i, "Y", "deflation")

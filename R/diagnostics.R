@@ -1,10 +1,11 @@
 # Keep bounded, per-fit counts rather than storing every optimizer evaluation.
-new_diagnostics <- function(group_names) {
+new_diagnostics <- function(group_names, use_cpp = TRUE) {
   d <- new.env(parent = emptyenv())
   d$group_names <- group_names
   d$component <- 1L
   d$swapped <- FALSE
   d$events <- list()
+  d$use_cpp <- use_cpp
   d
 }
 
@@ -50,12 +51,12 @@ finish_fit <- function(result, parameters, d, var.x, var.y) {
     b <- as.matrix(res$b)
     for (k in seq_len(ncol(a))) {
       d$component <- component + k - 1L
-      for (g in seq_along(d$group_names)) {
-        vx <- score_variance(a[, k], mat_slice(var.x, g), d, g, "X", "result")
-        vy <- score_variance(b[, k], mat_slice(var.y, g), d, g, "Y", "result")
-        if (vx == 0 || vy == 0) {
-          if (is.matrix(res$rho)) res$rho[g, k] <- NA_real_ else res$rho[g] <- NA_real_
-        }
+      groups <- length(d$group_names)
+      vx <- score_variance_groups(a[, k], var.x, groups, covariance_use_cpp(d))
+      vy <- score_variance_groups(b[, k], var.y, groups, covariance_use_cpp(d))
+      record_kernel_zeros(list(zero_x = vx == 0, zero_y = vy == 0), d, "result")
+      for (g in which(vx == 0 | vy == 0)) {
+        if (is.matrix(res$rho)) res$rho[g, k] <- NA_real_ else res$rho[g] <- NA_real_
       }
     }
     res

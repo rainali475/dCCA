@@ -20,6 +20,7 @@ verified.
 | dplyr | 1.1.4 |
 | expm | 1.0-0 |
 | purrr | 1.0.4 |
+| Rcpp | 1.1.2 |
 | stats | Included with R |
 
 These are tested versions, rather than declared minimum requirements. 
@@ -179,6 +180,7 @@ set `fisher.transform = FALSE` to use the original fitting path.
 | `solver_eps` | `1e-6` | Positive absolute and relative tolerance for the nested optimizer. |
 | `ncc` | `1` | Integer component count from 1 to min(p, q). |
 | `fisher.transform` | `TRUE` | Use the clipped Fisher-transformed objective when TRUE. |
+| `use_cpp` | `TRUE` | Use compiled C++ covariance computations; FALSE selects the R backend. |
 
 Sparse example with multiple starts:
 

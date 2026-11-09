@@ -13,7 +13,8 @@ Description: Estimates shared canonical weights maximizing weighted
 License: MIT + file LICENSE
 URL: https://github.com/Rainali475/dCCA
 BugReports: https://github.com/Rainali475/dCCA/issues
-Imports: dplyr, expm, purrr, stats
+Imports: dplyr, expm, purrr, stats, Rcpp
+LinkingTo: Rcpp
 Suggests: testthat (>= 3.0.0), roxygen2, renv, pkgload, knitr, rmarkdown
 VignetteBuilder: knitr
 Config/testthat/edition: 3
